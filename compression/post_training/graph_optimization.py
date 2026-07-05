@@ -2,19 +2,17 @@
 Graph optimization utilities for PyTorch models.
 Supports TorchScript and TorchFX optimizations with unified evaluation pipeline.
 """
-import os
+import warnings
+from typing import Any, Dict, Literal, Optional, Tuple
+
 import torch
 import torch.nn as nn
-import torch.fx as fx
 from torch.fx.experimental.optimization import (
     fuse,
-    remove_dropout, 
-    optimize_for_inference
+    optimize_for_inference,
+    remove_dropout,
 )
-from typing import Dict, Any, Optional, Tuple, Literal, List, Union, Callable
-import warnings
-import json
-import time
+
 
 def optimize_model(
     model: nn.Module,
@@ -54,8 +52,6 @@ def optimize_model(
     return optimized_model
 
 
-# TODO: Implement the graph optimization techniques of your choice
-# Use built-in torchscript functionalities
 def _optimize_with_torchscript(
     model: nn.Module,
     dummy_input: torch.Tensor,
@@ -75,12 +71,46 @@ def _optimize_with_torchscript(
     # Extract custom options with defaults
     if custom_options is None:
         custom_options = {}
-    
-    pass
+
+    # `use_script` lets the caller opt into torch.jit.script instead of
+    # torch.jit.trace. Tracing is simpler and works for most CNNs (no
+    # data-dependent control flow), but scripting is more faithful when
+    # the model has conditionals/loops that depend on tensor values.
+    use_script = custom_options.get("use_script", False)
+    do_freeze = custom_options.get("freeze", True)
+    do_optimize_for_inference = custom_options.get("optimize_for_inference", True)
+
+    model.eval()
+
+    with torch.no_grad():
+        if use_script:
+            scripted_model = torch.jit.script(model)
+        else:
+            with warnings.catch_warnings():
+                # Tracing commonly emits TracerWarnings for things like
+                # Python control flow that won't be captured dynamically;
+                # for a standard eval-mode CNN forward pass these are
+                # expected/benign, so we suppress the noise here.
+                warnings.simplefilter("ignore")
+                scripted_model = torch.jit.trace(model, dummy_input, check_trace=False)
+
+    scripted_model.eval()
+
+    # Freezing inlines the module's parameters/buffers as constants in the
+    # graph, which unlocks additional graph-level optimizations (constant
+    # folding, Conv+BN fusion, etc.) that aren't safe on a "live" module
+    # whose parameters could still change.
+    if do_freeze:
+        scripted_model = torch.jit.freeze(scripted_model)
+
+    # Applies TorchScript's inference-time optimization passes (operator
+    # fusion, removing no-ops, etc.) on top of the frozen graph.
+    if do_optimize_for_inference:
+        scripted_model = torch.jit.optimize_for_inference(scripted_model)
+
+    return scripted_model
 
 
-# TODO: Implement the graph optimization techniques of your choice
-# Use built-in torch fx functionalities
 def _optimize_with_torch_fx(
     model: nn.Module,
     dummy_input: torch.Tensor,
@@ -101,8 +131,31 @@ def _optimize_with_torch_fx(
     # Extract custom options with defaults
     if custom_options is None:
         custom_options = {}
-    
-    pass
+
+    pass_config = custom_options.get("pass_config", None)
+
+    model.eval()
+
+    with torch.no_grad():
+        # Dropout is a no-op in eval mode anyway, but stripping the nodes
+        # out of the FX graph avoids unnecessary graph complexity/overhead.
+        optimized_model = remove_dropout(model)
+
+        # Fuse fusible Conv+BN patterns (and similar) directly on the
+        # nn.Module before the inference-optimization pass below -- this
+        # is done explicitly here for clarity, even though
+        # `optimize_for_inference` performs its own fusion pass internally
+        # as well (a second pass over already-fused modules is a no-op).
+        optimized_model = fuse(optimized_model)
+
+        # Run FX's broader inference-optimization pipeline: additional
+        # operator fusions, and (where applicable/supported on this
+        # hardware) MKLDNN conversion for faster CPU inference.
+        optimized_model = optimize_for_inference(optimized_model, pass_config=pass_config)
+
+    optimized_model.eval()
+
+    return optimized_model
 
 
 def verify_model_equivalence(

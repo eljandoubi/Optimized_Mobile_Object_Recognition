@@ -1,26 +1,58 @@
-import os
-import json
 import time
+from typing import Any, Dict, List, Optional, Tuple
+
 import torch
 import torch.nn as nn
-import torchvision.models as models
 from torch.nn import functional as F
+from torchvision.models.mobilenetv3 import MobileNetV3, _mobilenet_v3_conf
 from tqdm import tqdm
-from typing import Dict, Any, Tuple, Optional, List
 
 from utils.model import *
 
-# TODO: Implement the student model
-# Make sure to parametrize the __init__() correctly
+
 class MobileNetV3_Household_Small(nn.Module):
     """
     Student model based on MobileNetV3-Household.
+
+    A narrower (width_mult < 1.0), randomly-initialized MobileNetV3-Small
+    backbone with a lightweight classifier head, meant to be trained via
+    knowledge distillation from a larger, already-trained teacher model
+    (e.g. the full MobileNetV3_Household).
     """
     
     def __init__(self, num_classes=10, width_mult=0.6, linear_size=256, dropout=0.2):
         super().__init__()
-        
-        pass
+
+        # Store constructor args so the model can be faithfully reconstructed
+        # later (e.g. by load_model / train_with_distillation).
+        self.num_classes = num_classes
+        self.width_mult = width_mult
+        self.linear_size = linear_size
+        self.dropout = dropout
+
+        # Build a MobileNetV3-Small architecture scaled by width_mult.
+        # We build from scratch (no pretrained weights) since a non-default
+        # width_mult produces a different channel configuration than the
+        # standard ImageNet-pretrained checkpoints support -- the point of
+        # the student model is to be small and to learn from the teacher
+        # via distillation, not from ImageNet weights directly.
+        inverted_residual_setting, last_channel = _mobilenet_v3_conf(
+            "mobilenet_v3_small", width_mult=width_mult
+        )
+        self.model = MobileNetV3(
+            inverted_residual_setting=inverted_residual_setting,
+            last_channel=last_channel,
+        )
+
+        # Replace the classifier head with a smaller, configurable one for
+        # the household objects dataset.
+        in_features = self.model.classifier[0].in_features
+        self.model.classifier = nn.Sequential(
+            nn.Linear(in_features, linear_size),
+            nn.Hardswish(inplace=True),
+            nn.Dropout(p=dropout, inplace=True),
+            nn.Linear(linear_size, num_classes),
+        )
     
     def forward(self, x):
         # Ensure input is correctly sized
@@ -28,9 +60,6 @@ class MobileNetV3_Household_Small(nn.Module):
         return self.model(x)
     
     
-# TODO: Implement the logic to compute the knowledge distillation loss
-# Remember that temperature is a weight for the teacher's probability distribution and 
-# alpha is the weight balancing teacher loss vs student loss
 def _knowledge_distillation_loss(student_logits, teacher_logits, targets, temperature=2.0, alpha=0.5):
     """
     Compute the knowledge distillation loss.
@@ -45,7 +74,31 @@ def _knowledge_distillation_loss(student_logits, teacher_logits, targets, temper
     Returns:
         Final loss combining distillation and standard cross entropy
     """
-    pass
+    # "Hard" loss: standard supervised loss against the ground-truth labels.
+    hard_loss = F.cross_entropy(student_logits, targets)
+
+    # "Soft" loss: match the student's softened output distribution to the
+    # teacher's softened output distribution. Dividing by `temperature`
+    # smooths both distributions, exposing the teacher's relative
+    # confidence across *incorrect* classes too (the extra signal that
+    # makes distillation useful beyond plain hard-label training).
+    soft_teacher_probs = F.softmax(teacher_logits / temperature, dim=1)
+    soft_student_log_probs = F.log_softmax(student_logits / temperature, dim=1)
+
+    # KL divergence between the two softened distributions. The
+    # temperature**2 scaling (per Hinton et al.) compensates for the
+    # gradient magnitudes shrinking by ~1/temperature**2 when both logits
+    # are divided by temperature, keeping the relative contribution of the
+    # distillation term consistent across different temperature choices.
+    distillation_loss = F.kl_div(
+        soft_student_log_probs, soft_teacher_probs, reduction='batchmean'
+    ) * (temperature ** 2)
+
+    # alpha balances how much weight goes to matching ground truth vs.
+    # mimicking the teacher's softened output distribution.
+    loss = alpha * hard_loss + (1.0 - alpha) * distillation_loss
+
+    return loss
 
 def _distill_single_epoch(
     student_model: nn.Module,
@@ -100,8 +153,16 @@ def _distill_single_epoch(
     for inputs, targets in pbar:
         inputs, targets = inputs.to(device), targets.to(device)
 
-        # TODO: implement forward pass for student and for teacher
-        # You need to create the variables: student_outputs and teacher_outputs
+        # Reset gradients before this batch's forward/backward pass.
+        optimizer.zero_grad()
+
+        # Teacher forward pass: no gradients needed, teacher weights are
+        # frozen and we only need its output distribution as a soft target.
+        with torch.no_grad():
+            teacher_outputs = teacher_model(inputs)
+
+        # Student forward pass: this is the one we backpropagate through.
+        student_outputs = student_model(inputs)
         
         # Compute distillation loss
         loss = _knowledge_distillation_loss(

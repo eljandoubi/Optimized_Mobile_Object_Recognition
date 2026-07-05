@@ -2,14 +2,13 @@
 Post-Training Pruning techniques for model compression.
 Supports both structured and unstructured pruning without retraining.
 """
-import os
-import torch
+from typing import Callable, List, Literal, Optional, Tuple, Union
+
 import torch.nn as nn
 import torch.nn.utils.prune as prune
-from typing import Dict, Any, Optional, Tuple, Literal, List, Union, Callable
 
 from utils.compression import calculate_sparsity, find_prunable_modules, is_pruned
-from utils.model import count_parameters, MobileNetV3_Household
+
 
 def prune_model(
     model: nn.Module,
@@ -73,11 +72,16 @@ def prune_model(
     final_sparsity = calculate_sparsity(model)
     print(f"Final model sparsity: {final_sparsity:.2f}%")
     
-    # 5. TODO: Remove pruning reparameterization to make the pruning permanent
+    # 5. Remove pruning reparameterization to make the pruning permanent
+    # (this drops the `weight_orig` / `weight_mask` buffers and bakes the
+    # zeros directly into `weight`, so the pruning survives e.g. state_dict
+    # save/load without needing the pruning hooks re-applied).
+    for module, param_name in modules_to_prune:
+        if prune.is_pruned(module) and hasattr(module, f"{param_name}_mask"):
+            prune.remove(module, param_name)
     
     return model
 
-# TODO: Implement l1 unstructured pruning, if selected
 def _apply_unstructured_pruning(
     model: nn.Module,
     modules_to_prune: List[Tuple[nn.Module, str]],
@@ -94,9 +98,11 @@ def _apply_unstructured_pruning(
     Returns:
         Pruned model
     """
-    pass
+    for module, param_name in modules_to_prune:
+        prune.l1_unstructured(module, name=param_name, amount=amount)
 
-# TODO: Implement random unstructured pruning, if selected
+    return model
+
 def _apply_random_unstructured_pruning(
     model: nn.Module,
     modules_to_prune: List[Tuple[nn.Module, str]],
@@ -113,9 +119,11 @@ def _apply_random_unstructured_pruning(
     Returns:
         Pruned model
     """
-    pass
+    for module, param_name in modules_to_prune:
+        prune.random_unstructured(module, name=param_name, amount=amount)
 
-# TODO: Implement structured pruning, if selected
+    return model
+
 def _apply_structured_pruning(
     model: nn.Module,
     modules_to_prune: List[Tuple[nn.Module, str]],
@@ -136,9 +144,28 @@ def _apply_structured_pruning(
     Returns:
         Pruned model
     """
-    pass
+    # Norm order defaults to L1 if not specified.
+    norm_order = n if n is not None else 1
 
-# TODO: Implement global pruning, if selected
+    for module, param_name in modules_to_prune:
+        if dim is not None:
+            module_dim = dim
+        elif isinstance(module, nn.Conv2d):
+            # dim=0 removes whole output channels (filters) of the conv.
+            module_dim = 0
+        elif isinstance(module, nn.Linear):
+            # dim=1 removes whole input features feeding the linear layer.
+            module_dim = 1
+        else:
+            # Fall back to pruning output units for any other module type.
+            module_dim = 0
+
+        prune.ln_structured(
+            module, name=param_name, amount=amount, n=norm_order, dim=module_dim
+        )
+
+    return model
+
 def _apply_global_pruning(
     model: nn.Module,
     modules_to_prune: List[Tuple[nn.Module, str]],
@@ -155,4 +182,15 @@ def _apply_global_pruning(
     Returns:
         Pruned model
     """
-    pass
+    # Global unstructured pruning ranks parameters across *all* the given
+    # modules together (by L1 magnitude) and prunes the smallest `amount`
+    # fraction overall, rather than pruning each module independently to
+    # the same fraction -- this lets less-important layers get pruned more
+    # heavily than more-important ones.
+    prune.global_unstructured(
+        modules_to_prune,
+        pruning_method=prune.L1Unstructured,
+        amount=amount,
+    )
+
+    return model
