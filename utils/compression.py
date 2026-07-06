@@ -6,22 +6,31 @@ and comparing models against baselines and requirements.
 """
 
 import json
-import numpy as np
 import os
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
 import pandas as pd
-import time
 import torch
 import torch.nn as nn
-from torchvision import models
-from typing import Dict, Any, List, Tuple, Optional, Union, Callable
 
-from utils import MAX_ALLOWED_ACCURACY_DROP, TARGET_INFERENCE_SPEEDUP,TARGET_MODEL_COMPRESSION 
-from utils.evaluation import (evaluate_model_metrics, compare_models, 
-                             evaluate_requirements_met, calculate_confusion_matrix)
-from utils.model import count_parameters, MobileNetV3_Household
-from utils.visualization import (plot_confusion_matrix, plot_training_history, 
-                                plot_weight_distribution, plot_model_comparison)
-
+from utils import (
+    MAX_ALLOWED_ACCURACY_DROP,
+    TARGET_INFERENCE_SPEEDUP,
+    TARGET_MODEL_COMPRESSION,
+)
+from utils.evaluation import (
+    calculate_confusion_matrix,
+    compare_models,
+    evaluate_model_metrics,
+    evaluate_requirements_met,
+)
+from utils.visualization import (
+    plot_confusion_matrix,
+    plot_model_comparison,
+    plot_training_history,
+    plot_weight_distribution,
+)
 
 # ------ EXPERIMENTATION UTILITIES ------ #
 
@@ -50,7 +59,7 @@ def evaluate_optimized_model(
     Returns:
         Tuple of (metrics, confusion_matrix)
     """
-    print(f"\nEvaluating performance of optimized model...")
+    print("\nEvaluating performance of optimized model...")
     n_classes = len(class_names)
 
     # Evaluate model metrics
@@ -120,7 +129,7 @@ def compare_optimized_model_to_baseline(
     Returns:
         Dictionary with comparison results
     """
-    print(f"\nComparing performance of optimized model against baseline...")
+    print("\nComparing performance of optimized model against baseline...")
     
     # Compare models
     comparison = compare_models(

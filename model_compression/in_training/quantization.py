@@ -7,14 +7,16 @@ dataset, along with functions for quantization-aware training and model conversi
 
 import copy
 import time
-from typing import Dict, Any, Tuple, Optional
+from typing import Any, Dict, Tuple
 
 import torch
-import torch.nn as nn
 import torch.ao.quantization
+import torch.nn as nn
 from torchvision.models.mobilenetv3 import MobileNet_V3_Small_Weights
-from torchvision.models.quantization.mobilenetv3 import _mobilenet_v3_conf, _mobilenet_v3_model
-from tqdm import tqdm
+from torchvision.models.quantization.mobilenetv3 import (
+    _mobilenet_v3_conf,
+    _mobilenet_v3_model,
+)
 
 try:
     # Newer PyTorch location
@@ -22,7 +24,7 @@ try:
 except ImportError:  # pragma: no cover - fallback for older PyTorch versions
     from torch.nn.intrinsic.qat import freeze_bn_stats
 
-from utils.model import get_model_size, save_model, train_single_epoch, validate_single_epoch
+from utils.model import save_model, train_single_epoch, validate_single_epoch
 
 
 class QuantizableMobileNetV3_Household(nn.Module):
@@ -259,7 +261,9 @@ def train_model_qat(
             # existing optimizer's references may be stale. Recreate the
             # optimizer against the prepared model's parameters, keeping
             # the same hyperparameters (lr, momentum, weight_decay, etc.).
-            optimizer = optimizer.__class__(model.parameters(), **optimizer.defaults)
+            kwargs = optimizer.defaults
+            kwargs.pop('decoupled_weight_decay', None)
+            optimizer = optimizer.__class__(model.parameters(), **kwargs)
 
             # Schedulers hold a reference to the optimizer they manage;
             # point it at the freshly created optimizer so `scheduler.step()`

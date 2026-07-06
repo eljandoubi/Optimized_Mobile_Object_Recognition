@@ -5,17 +5,17 @@ This module provides functions for evaluating models and generating comprehensiv
 including accuracy, inference time, model size, and memory usage.
 """
 import copy
-import os
 import gc
 import json
+import os
 import time
+from typing import Any, Dict, List, Optional, Tuple, Union
+
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from typing import Dict, Any, List, Tuple, Optional, Union
-
 
 # ------ QUANTIZATION UTILITIES ------ #
 
@@ -344,8 +344,8 @@ def measure_model_size(
     Returns:
         Dictionary of size metrics (total_params, trainable_params, model_size_bytes, model_size_mb)
     """
-    import tempfile
     import os
+    import tempfile
     
     # Torchscript models require slighly different handling, so let's create a variable to identify them
     is_torchscript = isinstance(model, torch.jit.ScriptModule)
@@ -377,6 +377,9 @@ def measure_model_size(
     if not is_torchscript:
         total_params = sum(p.numel() for p in model.parameters())
         trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        if total_params == 0:
+            total_params = sum(p.numel() for p in model.buffers())
+            trainable_params = total_params  # Buffers are not trainable
     else:
         total_params = model_size_bytes // 4
         trainable_params = total_params  # All params in TorchScript are "trainable" 
@@ -385,8 +388,8 @@ def measure_model_size(
     if save_path == temp_file:
         try:
             os.remove(temp_file)
-        except:
-            pass
+        except Exception as e:
+            print(f"Error occurred while removing temporary file: {e}")
     
     return {
         'total_params': total_params,
@@ -727,8 +730,8 @@ def print_model_summary(model: nn.Module) -> None:
     """
     param_counts = count_parameters(model)
     
-    print(f"Model Summary:")
-    print(f"=============")
+    print("Model Summary:")
+    print("=============")
     print(f"Total parameters: {param_counts['total']:,}")
     print(f"Trainable parameters: {param_counts['trainable']:,}")
     print(f"Non-trainable parameters: {param_counts['non_trainable']:,}")
