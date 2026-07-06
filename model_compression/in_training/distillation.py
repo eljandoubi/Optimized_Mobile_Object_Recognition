@@ -1,14 +1,15 @@
+import os
+import json
 import time
-from typing import Any, Dict, List, Optional, Tuple
-
 import torch
 import torch.nn as nn
+import torchvision.models as models
+from torchvision.models.mobilenetv3 import _mobilenet_v3_conf, MobileNetV3
 from torch.nn import functional as F
-from torchvision.models.mobilenetv3 import MobileNetV3, _mobilenet_v3_conf
 from tqdm import tqdm
+from typing import Dict, Any, Tuple, Optional, List
 
 from utils.model import *
-
 
 class MobileNetV3_Household_Small(nn.Module):
     """
@@ -104,7 +105,6 @@ def _distill_single_epoch(
     student_model: nn.Module,
     teacher_model: nn.Module,
     train_loader,
-    criterion: nn.Module,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
     temperature: float = 2.0,
@@ -120,7 +120,6 @@ def _distill_single_epoch(
         student_model: Smaller model to be trained (student)
         teacher_model: Larger pre-trained model (teacher)
         train_loader: Training data loader
-        criterion: Standard loss function (for hard targets)
         optimizer: PyTorch optimizer for student model
         device: Device to train on
         temperature: Temperature for softening probability distributions
@@ -278,7 +277,6 @@ def train_with_distillation(
             student_model=student_model,
             teacher_model=teacher_model,
             train_loader=train_loader,
-            criterion=standard_criterion,
             optimizer=optimizer,
             device=device,
             temperature=temperature,

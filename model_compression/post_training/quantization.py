@@ -5,13 +5,15 @@ This module provides utilities for applying post-training quantization to PyTorc
 supporting both static and dynamic quantization methods.
 """
 
+import os
 import copy
-from typing import Optional
+from typing import Dict, Any, List, Optional, Tuple
 
 import torch
-import torch.ao.quantization as tq
 import torch.nn as nn
-from torch.ao.quantization import DeQuantStub, QuantStub
+import torch.ao.quantization as tq
+from torch.ao.quantization import QuantStub, DeQuantStub
+import torch.ao.quantization.quantize_fx as quantize_fx
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 

@@ -2,13 +2,14 @@
 Post-Training Pruning techniques for model compression.
 Supports both structured and unstructured pruning without retraining.
 """
-from typing import Callable, List, Literal, Optional, Tuple, Union
-
+import os
+import torch
 import torch.nn as nn
 import torch.nn.utils.prune as prune
+from typing import Dict, Any, Optional, Tuple, Literal, List, Union, Callable
 
 from utils.compression import calculate_sparsity, find_prunable_modules, is_pruned
-
+from utils.model import count_parameters, MobileNetV3_Household
 
 def prune_model(
     model: nn.Module,

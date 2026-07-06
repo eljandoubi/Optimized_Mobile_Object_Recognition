@@ -4,9 +4,9 @@ UdaciSense Project: Evaluation Metrics Module
 This module provides functions for evaluating models and generating comprehensive metrics
 including accuracy, inference time, model size, and memory usage.
 """
-
 import copy
 import os
+import gc
 import json
 import time
 import numpy as np
@@ -15,6 +15,52 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from typing import Dict, Any, List, Tuple, Optional, Union
+
+
+# ------ QUANTIZATION UTILITIES ------ #
+
+def is_quantized(model: nn.Module, silent: Optional[bool]=False) -> bool:
+    """Check if a model is quantized.
+    
+    Args:
+        model: PyTorch model to check
+        silent: Whether printing should happen or not
+        
+    Returns:
+        Boolean indicating whether the model is quantized
+    """
+    # Check for evidence of actual quantization
+    for module in model.modules():
+        module_name = module.__class__.__name__
+        
+        # Check for quantized module names (definitive sign)
+        if any(q_type in module_name for q_type in ['Quantized', 'Int8', 'FP8', 'QFunctional']):
+            if not silent:
+                print("✅ Model is quantized")
+            return True
+        
+        # Check for scale and zero_point in dynamic/static quantization
+        if hasattr(module, 'scale') and hasattr(module, 'zero_point'):
+            if not silent:
+                print("✅ Model is quantized")
+            return True
+            
+        # For TorchScript quantized models
+        if hasattr(module, '_packed_params'):
+            if not silent:
+                print("✅ Model is quantized")
+            return True
+    
+    # Check for fake quantization modules that are active
+    for name, buffer in model.named_buffers():
+        if 'fake_quant' in name or 'observer' in name:
+            if not silent:
+                print("✅ Model is quantized")
+            return True
+    
+    if not silent:
+        print("❌ Model is not quantized")
+    return False
 
 
 # ------ ACCURACY EVALUATION FUNCTIONS ------ #
@@ -115,7 +161,6 @@ def evaluate_per_class_accuracy(
                 label = targets[i].item()
                 class_correct[label] += c[i].item()
                 class_total[label] += 1
-    
     # Calculate per-class accuracy
     per_class_accuracy = {}
     for i in range(num_classes):
@@ -197,7 +242,6 @@ def measure_inference_time(
         }
     """
     results = {}
-    
     # Test on CPU
     try:
         cpu_device = torch.device('cpu')
@@ -207,14 +251,14 @@ def measure_inference_time(
         dummy_input_cpu = torch.randn(input_size, device=cpu_device)
 
         ## Warmup runs on CPU
-        for _ in range(num_warmup):
+        for _ in tqdm(range(num_warmup),desc="cpu warmup"):
             with torch.no_grad():
                 _ = model_cpu(dummy_input_cpu)
 
         ## Measure inference time on CPU
         start_time = time.time()
         with torch.no_grad():
-            for _ in range(num_runs):
+            for _ in tqdm(range(num_runs),desc="cpu runs"):
                 _ = model_cpu(dummy_input_cpu)
 
         end_time = time.time()
@@ -228,13 +272,21 @@ def measure_inference_time(
             'avg_time_ms': avg_time,
             'fps': 1000 / avg_time  # Frames per second
         }
-    except:
+    except Exception as e:
         results['cpu'] = {}
-        print("WARNING: Model does not support inference with cpu. Skipping latency evaluation for CPU.")
+        print("WARNING: Model does not support inference with cpu. Skipping latency evaluation for CPU.",str(e)[:100])
+
+    finally:
+        if 'model_cpu' in locals():
+            del model_cpu
+        gc.collect()
+
 
     # Test on CUDA if available
     if torch.cuda.is_available():
         try:
+            if is_quantized(model, silent=True):
+                raise ValueError("Model is quantized (CPU-only backend, e.g. fbgemm/qnnpack).")
             cuda_device = torch.device('cuda')
             model_cuda = copy.deepcopy(model).to(cuda_device)
 
@@ -242,7 +294,8 @@ def measure_inference_time(
             dummy_input_cuda = torch.randn(input_size, device=cuda_device)
 
             ## Warmup runs on CUDA
-            for _ in range(num_warmup):
+            torch.cuda.synchronize()
+            for _ in tqdm(range(num_warmup),desc="gpu warmup"):
                 with torch.no_grad():
                     _ = model_cuda(dummy_input_cuda)
                     torch.cuda.synchronize()
@@ -251,7 +304,7 @@ def measure_inference_time(
             torch.cuda.synchronize()
             start_time = time.time()
             with torch.no_grad():
-                for _ in range(num_runs):
+                for _ in tqdm(range(num_runs),desc="gpu runs"):
                     _ = model_cuda(dummy_input_cuda)
                     torch.cuda.synchronize()
 
@@ -266,9 +319,14 @@ def measure_inference_time(
                 'avg_time_ms': avg_time,
                 'fps': 1000 / avg_time  # Frames per second
             }
-        except:
+        except Exception as e:
             results['cuda'] = {}
-            print("WARNING: Model does not support inference with cuda. Skipping latency evaluation for GPU.")
+            print("WARNING: Model does not support inference with cuda. Skipping latency evaluation for GPU.", str(e)[:100])
+        finally:
+            if 'model_cuda' in locals():
+                del model_cuda
+            gc.collect()
+            torch.cuda.empty_cache()
     
     return results
 
@@ -412,10 +470,8 @@ def evaluate_model_metrics(
     per_class_accuracy = evaluate_per_class_accuracy(
         model, dataloader, device, num_classes, class_names
     )
-    
     # Measure inference time on both CPU and CUDA (if available)
     timing_metrics = measure_inference_time(model, input_size)
-    
     # Measure model size
     size_metrics = measure_model_size(model)
     

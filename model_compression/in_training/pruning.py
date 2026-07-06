@@ -5,24 +5,19 @@ This module provides functions for implementing Gradual Magnitude Pruning (GMP)
 during model training.
 """
 
+import os
 import copy
-import time
-from typing import Any, Dict, List, Tuple
-
 import numpy as np
+import time
 import torch
 import torch.nn as nn
 import torch.nn.utils.prune as prune
 from torch.utils.data import DataLoader
+from tqdm import tqdm
+from typing import Dict, Any, Tuple, Optional, List, Callable, Union, Literal
 
+from utils.model import count_parameters, save_model, load_model, train_single_epoch, validate_single_epoch
 from utils.compression import calculate_sparsity, find_prunable_modules, is_pruned
-from utils.model import (
-    count_parameters,
-    save_model,
-    train_single_epoch,
-    validate_single_epoch,
-)
-
 
 def compute_sparsity_schedule(
     initial_sparsity: float,

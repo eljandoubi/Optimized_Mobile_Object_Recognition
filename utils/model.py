@@ -120,21 +120,23 @@ def load_model(
     
 
 def save_model(model: nn.Module, path: str) -> None:
-    """Save a model to the given path.
-    
-    Args:
-        model: PyTorch model
-        path: Path to save model
     """
-    # Create directory if it doesn't exist
+    Correct replacement for utils.model.save_model(). That function
+    distinguishes "FX-optimized" models via
+    `hasattr(model, '_modules') and hasattr(model, 'graph')`, but
+    TorchScript modules also have both of these attributes -- so a
+    TorchScript model incorrectly falls into the torch.save(model, path)
+    branch, which tries to pickle it directly. TorchScript modules are
+    C++-backed and have no __getstate__, causing exactly this
+    RuntimeError. They need torch.jit.save() instead.
+    """
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    
-    # Special handling for FX-optimized models
-    if hasattr(model, '_modules') and hasattr(model, 'graph'):
+    if isinstance(model, torch.jit.ScriptModule):
+        torch.jit.save(model, path)
+    elif isinstance(model, torch.fx.GraphModule):
         torch.save(model, path)
     else:
         torch.save(model.state_dict(), path)
-
     print(f"Model saved to {path}")
 
 

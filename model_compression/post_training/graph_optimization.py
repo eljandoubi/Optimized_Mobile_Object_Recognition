@@ -2,17 +2,19 @@
 Graph optimization utilities for PyTorch models.
 Supports TorchScript and TorchFX optimizations with unified evaluation pipeline.
 """
-import warnings
-from typing import Any, Dict, Literal, Optional, Tuple
-
+import os
 import torch
 import torch.nn as nn
+import torch.fx as fx
 from torch.fx.experimental.optimization import (
     fuse,
-    optimize_for_inference,
-    remove_dropout,
+    remove_dropout, 
+    optimize_for_inference
 )
-
+from typing import Dict, Any, Optional, Tuple, Literal, List, Union, Callable
+import warnings
+import json
+import time
 
 def optimize_model(
     model: nn.Module,

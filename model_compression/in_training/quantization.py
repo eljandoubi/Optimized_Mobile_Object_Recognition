@@ -7,16 +7,14 @@ dataset, along with functions for quantization-aware training and model conversi
 
 import copy
 import time
-from typing import Any, Dict, Tuple
+from typing import Dict, Any, Tuple, Optional
 
 import torch
-import torch.ao.quantization
 import torch.nn as nn
+import torch.ao.quantization
 from torchvision.models.mobilenetv3 import MobileNet_V3_Small_Weights
-from torchvision.models.quantization.mobilenetv3 import (
-    _mobilenet_v3_conf,
-    _mobilenet_v3_model,
-)
+from torchvision.models.quantization.mobilenetv3 import _mobilenet_v3_conf, _mobilenet_v3_model
+from tqdm import tqdm
 
 try:
     # Newer PyTorch location
@@ -24,7 +22,7 @@ try:
 except ImportError:  # pragma: no cover - fallback for older PyTorch versions
     from torch.nn.intrinsic.qat import freeze_bn_stats
 
-from utils.model import save_model, train_single_epoch, validate_single_epoch
+from utils.model import get_model_size, save_model, train_single_epoch, validate_single_epoch
 
 
 class QuantizableMobileNetV3_Household(nn.Module):
@@ -267,7 +265,24 @@ def train_model_qat(
             # point it at the freshly created optimizer so `scheduler.step()`
             # keeps working correctly.
             if scheduler is not None:
-                scheduler.optimizer = optimizer
+                if isinstance(scheduler, torch.optim.lr_scheduler.OneCycleLR):
+                    remaining_epochs = num_epochs - qat_start_epoch
+                    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+                        optimizer,
+                        max_lr=scheduler.optimizer.param_groups[0].get('max_lr', optimizer.defaults['lr']),
+                        epochs=remaining_epochs,
+                        steps_per_epoch=len(train_loader),
+                    )
+                elif isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                    # ReduceLROnPlateau doesn't stash per-group anchor keys, so it's
+                    # safe to just rebuild it fresh against the new optimizer.
+                    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min')
+                else:
+                    # Generic fallback for schedulers with no special per-group state
+                    scheduler = scheduler.__class__(optimizer, **{
+                        k: v for k, v in vars(scheduler).items()
+                        if k in scheduler.__init__.__code__.co_varnames
+                    })
         
         # Train for one epoch
         train_loss, train_accuracy = train_single_epoch(
