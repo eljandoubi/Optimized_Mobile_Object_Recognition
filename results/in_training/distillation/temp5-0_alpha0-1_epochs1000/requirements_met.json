@@ -1,0 +1,7 @@
+{
+    "size_requirement_met": true,
+    "accuracy_requirement_met": false,
+    "all_requirements_met": false,
+    "speed_requirement_met_cpu": false,
+    "speed_requirement_met_cuda": false
+}

@@ -1,0 +1,90 @@
+{
+    "baseline": {
+        "accuracy": {
+            "top1_acc": 88.5,
+            "top5_acc": 99.2
+        },
+        "per_class_accuracy": {
+            "clock": 97.0,
+            "keyboard": 91.0,
+            "lamp": 93.0,
+            "telephone": 77.0,
+            "television": 94.0,
+            "bed": 88.0,
+            "chair": 89.0,
+            "couch": 73.0,
+            "table": 88.0,
+            "wardrobe": 95.0
+        },
+        "timing": {
+            "cpu": {
+                "total_time_ms": 618.3102130889893,
+                "avg_time_ms": 6.183102130889893,
+                "fps": 161.73111471087356
+            },
+            "cuda": {
+                "total_time_ms": 464.4961357116699,
+                "avg_time_ms": 4.644961357116699,
+                "fps": 215.28704398538576
+            }
+        },
+        "size": {
+            "total_params": 1528106,
+            "trainable_params": 1528106,
+            "model_size_bytes": 6249733,
+            "model_size_mb": 5.960209846496582
+        },
+        "memory": {
+            "peak_memory_mb": 33.3603515625,
+            "allocated_memory_mb": 30.87255859375
+        }
+    },
+    "optimized": {
+        "accuracy": {
+            "top1_acc": 88.5,
+            "top5_acc": 99.2
+        },
+        "per_class_accuracy": {
+            "clock": 97.0,
+            "keyboard": 91.0,
+            "lamp": 93.0,
+            "telephone": 77.0,
+            "television": 94.0,
+            "bed": 88.0,
+            "chair": 89.0,
+            "couch": 73.0,
+            "table": 88.0,
+            "wardrobe": 95.0
+        },
+        "timing": {
+            "cpu": {},
+            "cuda": {
+                "total_time_ms": 312.27898597717285,
+                "avg_time_ms": 3.1227898597717285,
+                "fps": 320.22647853515787
+            }
+        },
+        "size": {
+            "total_params": 1530432,
+            "trainable_params": 1530432,
+            "model_size_bytes": 6121731,
+            "model_size_mb": 5.838137626647949
+        },
+        "memory": {
+            "peak_memory_mb": 32.2119140625,
+            "allocated_memory_mb": 30.87255859375
+        }
+    },
+    "improvements": {
+        "size_reduction": 0.020481194956648574,
+        "params_reduction": -0.001522145715022294,
+        "inference": {
+            "cuda": {
+                "speedup": 1.4874396183213683,
+                "reduction": 0.3277038021022072
+            }
+        },
+        "accuracy_change": 0.0,
+        "memory_reduction": 0.034425221744094125
+    }
+}

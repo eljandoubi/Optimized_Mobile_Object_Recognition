@@ -1,0 +1,90 @@
+{
+    "baseline": {
+        "accuracy": {
+            "top1_acc": 88.4,
+            "top5_acc": 99.2
+        },
+        "per_class_accuracy": {
+            "clock": 97.0,
+            "keyboard": 91.0,
+            "lamp": 93.0,
+            "telephone": 76.0,
+            "television": 94.0,
+            "bed": 88.0,
+            "chair": 89.0,
+            "couch": 73.0,
+            "table": 88.0,
+            "wardrobe": 95.0
+        },
+        "timing": {
+            "cpu": {
+                "total_time_ms": 604.7041416168213,
+                "avg_time_ms": 6.047041416168213,
+                "fps": 165.37012584803216
+            },
+            "cuda": {
+                "total_time_ms": 462.07284927368164,
+                "avg_time_ms": 4.620728492736816,
+                "fps": 216.41609143923296
+            }
+        },
+        "size": {
+            "total_params": 1528106,
+            "trainable_params": 1528106,
+            "model_size_bytes": 6246341,
+            "model_size_mb": 5.956974983215332
+        },
+        "memory": {
+            "peak_memory_mb": null,
+            "allocated_memory_mb": null
+        }
+    },
+    "optimized": {
+        "accuracy": {
+            "top1_acc": 88.4,
+            "top5_acc": 99.2
+        },
+        "per_class_accuracy": {
+            "clock": 97.0,
+            "keyboard": 91.0,
+            "lamp": 93.0,
+            "telephone": 76.0,
+            "television": 94.0,
+            "bed": 88.0,
+            "chair": 89.0,
+            "couch": 73.0,
+            "table": 88.0,
+            "wardrobe": 95.0
+        },
+        "timing": {
+            "cpu": {
+                "total_time_ms": 630.2299499511719,
+                "avg_time_ms": 6.302299499511719,
+                "fps": 158.67224337362524
+            },
+            "cuda": {}
+        },
+        "size": {
+            "total_params": 603360,
+            "trainable_params": 603360,
+            "model_size_bytes": 2413441,
+            "model_size_mb": 2.3016366958618164
+        },
+        "memory": {
+            "peak_memory_mb": null,
+            "allocated_memory_mb": null
+        }
+    },
+    "improvements": {
+        "size_reduction": 0.6136232395893852,
+        "params_reduction": 0.605158280904597,
+        "inference": {
+            "cpu": {
+                "speedup": 0.9594976272766341,
+                "reduction": -0.042212061366243114
+            }
+        },
+        "accuracy_change": 0.0,
+        "memory_reduction": null
+    }
+}
