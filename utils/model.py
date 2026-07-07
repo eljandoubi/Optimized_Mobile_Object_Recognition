@@ -7,14 +7,13 @@ for the household objects dataset.
 
 import os
 import time
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type
+
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torchvision.models as models
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from typing import Dict, Any, Tuple, Optional, List, Callable, Type
-
 
 # ------ MODEL CLASSES ------ #
 
@@ -99,6 +98,17 @@ def load_model(
     if not os.path.exists(path):
         raise FileNotFoundError(f"Model file not found: {path}")
 
+    if path.endswith('.pt'):
+        try:
+        # Load TorchScript model
+            model = torch.jit.load(path, map_location=device)
+            model = torch.jit.optimize_for_inference(model)
+            model.eval()
+            model.to(device)
+            return model
+        except Exception as e:
+            print(f"Error loading TorchScript model: {e}")
+    
     # Load checkpoint
     loaded = torch.load(path, map_location=device)
 
@@ -172,7 +182,7 @@ def print_model_summary(model: nn.Module) -> None:
     Args:
         model: PyTorch model
     """
-    print(f"Model Architecture:")
+    print("Model Architecture:")
     print(f"{model}\n")
     
     print(f"Total Parameters: {count_parameters(model):,}")
